@@ -195,9 +195,12 @@ RCT_EXPORT_METHOD(getPhotos:(NSDictionary *)params
 
   // If groupTypes is "all", we want to fetch the SmartAlbum "all photos". Otherwise, all
   // other groupTypes values require the "album" collection type.
-  PHAssetCollectionType const collectionType = ([groupTypes isEqualToString:@"all"]
-                                                ? PHAssetCollectionTypeSmartAlbum
-                                                : PHAssetCollectionTypeAlbum);
+  /* PHAssetCollectionType const collectionType = ([groupTypes isEqualToString:@"all"] */
+  /*                                               ? PHAssetCollectionTypeSmartAlbum */
+  /*                                               : PHAssetCollectionTypeAlbum); */
+
+  // It's not sorting it properly when smart album
+  PHAssetCollectionType const collectionType = PHAssetCollectionTypeAlbum;
   PHAssetCollectionSubtype const collectionSubtype = [RCTConvert PHAssetCollectionSubtype:groupTypes];
 
   // Predicate for fetching assets within a collection
@@ -222,6 +225,8 @@ RCT_EXPORT_METHOD(getPhotos:(NSDictionary *)params
   requestPhotoLibraryAccess(reject, ^{
     void (^collectAsset)(PHAsset*, NSUInteger, BOOL*) = ^(PHAsset * _Nonnull asset, NSUInteger assetIdx, BOOL * _Nonnull stopAssets) {
       NSString *const uri = [NSString stringWithFormat:@"ph://%@", [asset localIdentifier]];
+      NSString *const extension = [asset valueForKey: @"uniformTypeIdentifier"];
+
       if (afterCursor && !foundAfter) {
         if ([afterCursor isEqualToString:uri]) {
           foundAfter = YES;
@@ -284,6 +289,7 @@ RCT_EXPORT_METHOD(getPhotos:(NSDictionary *)params
       [assets addObject:@{
         @"node": @{
           @"type": assetMediaTypeLabel, // TODO: switch to mimeType?
+          @"extension": extension,
           @"group_name": currentCollectionName,
           @"image": @{
               @"uri": uri,
