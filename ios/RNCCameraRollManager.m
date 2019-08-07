@@ -40,34 +40,6 @@ RCT_ENUM_CONVERTER(PHAssetCollectionSubtype, (@{
 
 @end
 
-@implementation RCTConvert (PHFetchOptions)
-
-+ (PHFetchOptions *)PHFetchOptionsFromMediaType:(NSString *)mediaType
-{
-  // This is not exhaustive in terms of supported media type predicates; more can be added in the future
-  NSString *const lowercase = [mediaType lowercaseString];
-
-  if ([lowercase isEqualToString:@"photos"]) {
-    PHFetchOptions *const options = [PHFetchOptions new];
-    options.predicate = [NSPredicate predicateWithFormat:@"mediaType = %d", PHAssetMediaTypeImage];
-    return options;
-  } else if ([lowercase isEqualToString:@"videos"]) {
-    PHFetchOptions *const options = [PHFetchOptions new];
-    options.predicate = [NSPredicate predicateWithFormat:@"mediaType = %d", PHAssetMediaTypeVideo];
-    return options;
-  } else {
-    if (![lowercase isEqualToString:@"all"]) {
-      RCTLogError(@"Invalid filter option: '%@'. Expected one of 'photos',"
-                  "'videos' or 'all'.", mediaType);
-    }
-    // This case includes the "all" mediatype
-    PHFetchOptions *const options = [PHFetchOptions new];
-    return options;
-  }
-}
-
-@end
-
 @implementation RNCCameraRollManager
 
 RCT_EXPORT_MODULE(RNCCameraRoll)
@@ -195,17 +167,30 @@ RCT_EXPORT_METHOD(getPhotos:(NSDictionary *)params
 
   // If groupTypes is "all", we want to fetch the SmartAlbum "all photos". Otherwise, all
   // other groupTypes values require the "album" collection type.
-  /* PHAssetCollectionType const collectionType = ([groupTypes isEqualToString:@"all"] */
-  /*                                               ? PHAssetCollectionTypeSmartAlbum */
-  /*                                               : PHAssetCollectionTypeAlbum); */
-
-  // It's not sorting it properly when smart album
-  PHAssetCollectionType const collectionType = PHAssetCollectionTypeAlbum;
+  PHAssetCollectionType const collectionType = ([groupTypes isEqualToString:@"all"]
+                                                ? PHAssetCollectionTypeSmartAlbum
+                                                : PHAssetCollectionTypeAlbum);
   PHAssetCollectionSubtype const collectionSubtype = [RCTConvert PHAssetCollectionSubtype:groupTypes];
 
   // Predicate for fetching assets within a collection
-  PHFetchOptions *const assetFetchOptions = [RCTConvert PHFetchOptionsFromMediaType:mediaType];
+  PHFetchOptions *const assetFetchOptions = [PHFetchOptions new];
   assetFetchOptions.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO]];
+  
+  // This is not exhaustive in terms of supported media type predicates; more can be added in the future
+  NSString *const lowercaseMediaType = [mediaType lowercaseString];
+  
+  if ([lowercaseMediaType isEqualToString:@"photos"]) {
+    assetFetchOptions.predicate = [NSPredicate predicateWithFormat:@"mediaType = %d", PHAssetMediaTypeVideo];
+  } else if ([lowercaseMediaType isEqualToString:@"videos"]) {
+    assetFetchOptions.predicate = [NSPredicate predicateWithFormat:@"mediaType = %d", PHAssetMediaTypeVideo];
+  } else {
+    if (![lowercaseMediaType isEqualToString:@"all"]) {
+      RCTLogError(@"Invalid filter option: '%@'. Expected one of 'photos',"
+                  "'videos' or 'all'.", mediaType);
+    }
+    // This case includes the "all" mediatype
+    assetFetchOptions.predicate = [NSPredicate predicateWithFormat:@"mediaType = %d || mediaType = %d", PHAssetMediaTypeVideo, PHAssetMediaTypeImage];
+  }
 
   BOOL __block foundAfter = NO;
   BOOL __block hasNextPage = NO;
@@ -225,8 +210,6 @@ RCT_EXPORT_METHOD(getPhotos:(NSDictionary *)params
   requestPhotoLibraryAccess(reject, ^{
     void (^collectAsset)(PHAsset*, NSUInteger, BOOL*) = ^(PHAsset * _Nonnull asset, NSUInteger assetIdx, BOOL * _Nonnull stopAssets) {
       NSString *const uri = [NSString stringWithFormat:@"ph://%@", [asset localIdentifier]];
-      NSString *const extension = [asset valueForKey: @"uniformTypeIdentifier"];
-
       if (afterCursor && !foundAfter) {
         if ([afterCursor isEqualToString:uri]) {
           foundAfter = YES;
@@ -289,7 +272,6 @@ RCT_EXPORT_METHOD(getPhotos:(NSDictionary *)params
       [assets addObject:@{
         @"node": @{
           @"type": assetMediaTypeLabel, // TODO: switch to mimeType?
-          @"extension": extension,
           @"group_name": currentCollectionName,
           @"image": @{
               @"uri": uri,
